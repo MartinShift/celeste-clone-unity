@@ -9,8 +9,16 @@ public class NextLevel : MonoBehaviour
     {
         if (other.CompareTag("Player"))
         {
-            PlayGame.MaxLevel++;
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex+1);
+            var nextLevel = SceneManager.GetActiveScene().buildIndex + 1;
+            PlayGame.CurrentLevel = nextLevel;
+            if(nextLevel > PlayGame.MaxLevel)
+            {
+                PlayGame.MaxLevel = nextLevel;
+            }
+            PlayGame.LastCheckpoint = null;
+            PlayerControls.LastCheckpoint = null;
+            PlayGame.Save();
+            SceneManager.LoadScene(nextLevel);
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.SceneManagement;
 
 public class PlayerControls : MonoBehaviour
@@ -14,24 +15,23 @@ public class PlayerControls : MonoBehaviour
         IgnoreRaycast,
         Ground,
         Water,
-        UI, 
+        UI,
         Walls
     }
-    private const int MaxJumps = 2;
 
-    private const int SpringJump = 15;
+    private const int SpringJump = 17;
 
     private bool canDash = true;
 
     private bool isDashing = false;
 
-    private float deathAnimationDuration = 1.5f;
+    private readonly float deathAnimationDuration = 1.5f;
 
-    private float dashSpeed = 17.3f;
+    private readonly float dashSpeed = 17.3f;
 
-    private float dashDuration = 0.2f;
+    private readonly float dashDuration = 0.2f;
 
-    private float dashCooldown = 1.2f;
+    private readonly float dashCooldown = 1.2f;
 
     private bool canMove = true;
 
@@ -41,13 +41,11 @@ public class PlayerControls : MonoBehaviour
 
     public float Jump = 6f;
 
-    public float SecondJump = 6;
-
-    public float JumpCount = 0;
-
     public Rigidbody2D Rigidbody;
 
     private Collider2D _collider;
+
+    public static Vector3? LastCheckpoint;
 
     private SpriteRenderer _spriteRenderer;
 
@@ -57,13 +55,19 @@ public class PlayerControls : MonoBehaviour
 
     public GameObject PauseMenu;
 
-    private bool _isGrounded;
+    private AudioSource audioSource;
 
     public LayerMask Ground;
 
     public LayerMask Walls;
 
     public LayerMask Death;
+
+    public AudioClip JumpClip;
+
+    public AudioClip DashClip;
+
+    public AudioClip DeathClip;
 
     void Start()
     {
@@ -72,6 +76,17 @@ public class PlayerControls : MonoBehaviour
         this._collider = gameObject.GetComponent<Collider2D>();
         this._spriteRenderer = gameObject.GetComponent<SpriteRenderer>();
         this._animator = gameObject.GetComponent<Animator>();
+        this.audioSource = gameObject.GetComponent<AudioSource>();
+        if (LastCheckpoint != null && LastCheckpoint != new Vector3(0,0,0))
+        {
+            this.Rigidbody.position = (Vector3)LastCheckpoint;
+        }
+        else
+        {
+            LastCheckpoint = this.Rigidbody.position;
+        }
+        AudioManager.Instance.SetMusicVolume(AudioManager.Instance.MusicVolume);
+        AudioManager.Instance.SetSoundVolume(AudioManager.Instance.SoundVolume);
     }
 
     void Update()
@@ -98,7 +113,7 @@ public class PlayerControls : MonoBehaviour
         canDash = false;
         isDashing = true;
         this._animator.SetBool("IsDashing", true);
-
+        this.audioSource.PlayOneShot(DashClip);
         Vector2 dashDirection = this._spriteRenderer.flipX ? Vector2.left : Vector2.right;
         this.Rigidbody.AddForce(dashDirection * dashSpeed, ForceMode2D.Impulse);
         this.TrailRenderer.emitting = true;
@@ -111,7 +126,6 @@ public class PlayerControls : MonoBehaviour
         this._animator.SetBool("IsDashing", false);
 
         yield return new WaitForSeconds(this.dashCooldown);
-
         this.canDash = true;
     }
 
@@ -140,14 +154,11 @@ public class PlayerControls : MonoBehaviour
         {
             this.Rigidbody.velocity = new Vector2(this.Rigidbody.velocity.x, Jump);
             this._animator.SetBool("IsJumping", true);
-            this.JumpCount++;
+            if (!this.audioSource.isPlaying)
+            {
+                this.audioSource.PlayOneShot(JumpClip);
+            }
         }
-        //else if (Input.GetKeyDown(KeyCode.Space) && this.JumpCount == 1)
-        //{
-        //    Debug.Log($"Second Jump of {JumpCount}");
-        //    this.Rigidbody.velocity = new Vector2(this.Rigidbody.velocity.x, SecondJump);
-        //    this.JumpCount++;
-        //}
         else if (_collider.IsTouchingLayers(Walls) && !_collider.IsTouchingLayers(Ground))
         {
             if (jumpInput > 0)
@@ -171,7 +182,6 @@ public class PlayerControls : MonoBehaviour
         if (_collider.IsTouchingLayers(Ground) && jumpInput == 0)
         {
             this._animator.SetBool("IsJumping", false);
-            this.JumpCount = 0;
         }
     }
     void OnCollisionEnter2D(Collision2D collision)
@@ -180,12 +190,20 @@ public class PlayerControls : MonoBehaviour
         {
             this.Rigidbody.velocity = new Vector2(this.Rigidbody.velocity.x, SpringJump);
             this._animator.SetBool("IsJumping", true);
-            Animator springAnimator = collision.gameObject.GetComponent<Animator>();
-            springAnimator.Play("SpringAnimation");
         }
-        if(Rigidbody.IsTouchingLayers(Death))
+        if (Rigidbody.IsTouchingLayers(Death))
         {
             StartCoroutine(AnimateDeath());
+        }
+    }
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (collision.gameObject.CompareTag("Checkpoint") && LastCheckpoint != collision.transform.position)
+        {
+            LastCheckpoint = collision.transform.position;
+            PlayGame.LastCheckpoint = LastCheckpoint;
+            Debug.Log("Checkpoint");
         }
     }
 
@@ -200,10 +218,13 @@ public class PlayerControls : MonoBehaviour
     {
         _animator.Play("Death");
         canMove = false;
+        audioSource.PlayOneShot(DeathClip);
 
         yield return new WaitForSeconds(deathAnimationDuration);
 
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        this.transform.position = (Vector3)LastCheckpoint;
         canMove = true;
     }
+
+
 }
